@@ -28,8 +28,8 @@ Windowsビルド設定はx64 portable、署名なしです。ビルド成果物�
 2. Google Auth Platformでアプリ名・連絡先・対象ユーザーを設定。個人テストならExternal/Testingとし、自分をテストユーザーへ追加する。アプリを一般公開する必要はありません。
 3. 使用スコープは `https://www.googleapis.com/auth/drive.appdata` と、接続先確認用の `openid email`。既存Drive全体への権限は不要です。
 4. Web application型OAuthクライアントを作り、実際に使う静的サイトのoriginをAuthorized JavaScript originsへ登録。localhost開発用も使う場合はそのoriginを明記する。ドメイン未決定のまま架空のoriginを登録しない。
-5. `src/config.js` の `googleWebClientId` に公開クライアントIDを設定する。**client secretはWebコードへ置かない**。
-6. Desktop app型OAuthクライアントを同じプロジェクトに作り、`src/google-config.json` の `googleDesktopClientId` に設定する。システムブラウザとPKCE、127.0.0.1の一時的なloopback callbackを使う。
+5. 下記の `.env` に Web 型の公開クライアントIDを設定する。**client secret は不要、Webコードへ置かない**。
+6. Desktop app型OAuthクライアントを同じプロジェクトに作り、`.env` の `GOOGLE_DESKTOP_CLIENT_ID` に設定する。システムブラウザとPKCE、127.0.0.1の一時的なloopback callbackを使う。
 7. Web版とPC版で同じGoogleアカウントを選ぶ。初回は端末内のタスクを選んだアカウントに同期する確認が表示される。実際に保存され、別端末へ反映されるまで確認して初めて同期完了とする。
 
 クライアントID自体は公開識別子です。Googleのパスワード、トークン、秘密鍵をリポジトリに追加しないでください。配布前のGoogle設定は未実施です。
@@ -61,3 +61,23 @@ Web版にはバックグラウンド通知を実装していません。Google�
 
 ## セキュリティ
 ElectronはcontextIsolation/sandbox有効、nodeIntegration無効。外部ナビゲーションを拒否。Googleログインだけをシステムブラウザで開きます。タスクはtextContent表示。CSPで接続先を限定。Service Workerはアプリの静的ファイルのみキャッシュし、Drive APIや認証データはキャッシュしません。
+
+## 接続設定は .env で指定
+
+リポジトリ直下で `.env.example` を `.env` にコピーし、発行した2つのIDだけを記入します（Windows PowerShell: `Copy-Item .env.example .env`）。
+
+```dotenv
+GOOGLE_WEB_CLIENT_ID=123-example-web.apps.googleusercontent.com
+GOOGLE_DESKTOP_CLIENT_ID=123-example-desktop.apps.googleusercontent.com
+```
+
+- Web: `npm run build:web` → **dist/web だけ**を配信。`src` を直接配信しても .env は読まれません。静的サイトでは設定変更後に再ビルド・再配信します。
+- Electron開発: `npm start` がプロジェクト直下の .env を読みます。
+- Electron配布: `npm run build:win` が公開Desktop IDだけを生成設定へ保存します。**.env本体は同梱しません**。配布後は実行ファイルの隣の .env またはOS環境変数で上書きできます。
+- 優先順: **OS環境変数 > .env > 配布時のDesktop ID > 空欄**。空欄を明示すると下位設定を使わず、未接続になります。Webには配布時Desktop IDのfallbackはありません。
+- .env はGit対象外。`.env.example` のみ共有します。`src/config.js` / `src/google-config.json` を編集する旧手順は不要です。空欄ならオフラインで利用可能。形式不正は値をログに出さず設定エラーになります。
+- **APIキー・client secret・パスワード・アクセストークンは設定不要**。Web出力は GOOGLE_WEB_CLIENT_ID の1項目のみ。環境変数全体やDesktop IDは出力しません。OAuth ID自体は公開識別子で、Web閲覧者にも見えます。
+- Google側のOAuthクライアント作成、Drive API有効化、許可origin設定は .env では代替できません。実アカウント接続は未検証です。
+
+### GitHub Pages（未有効化の例）
+`docs/github-pages.yml.example` は手動実行型の設定例です。公開承認後に `.github/workflows/pages.yml` にコピーし、PagesをGitHub Actionsに設定、Actions変数 `GOOGLE_WEB_CLIENT_ID` を登録します。例のoriginは `https://cimc24004.github.io`、配信パスは `/todo-sync/`。相対アセットURL・PWAの相対scopeを使用しています。現時点ではワークフローは有効化しておらず、サイトも公開していません。

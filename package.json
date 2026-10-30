@@ -1,14 +1,15 @@
 {
   "name": "michi-todo",
   "version": "1.0.0",
-  "description": "Google Drive\u540c\u671f\u5bfe\u5fdc\u306e\u65e5\u672c\u8a9eToDo\u30a2\u30d7\u30ea\uff08Web/PWA + Electron\uff09",
+  "description": "Google Drive同期対応の日本語ToDoアプリ（Web/PWA + Electron）",
   "main": "src/main.cjs",
   "private": true,
   "scripts": {
     "start": "electron .",
     "test": "node --test",
     "build:win": "electron-builder --win portable --x64",
-    "build:web": "node scripts/build-web.cjs"
+    "build:web": "node scripts/build-web.cjs",
+    "prebuild:win": "node scripts/prepare-desktop.cjs"
   },
   "devDependencies": {
     "electron": "45.1.0",
@@ -20,7 +21,9 @@
     "productName": "Michi ToDo",
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "!**/.env",
+      "!**/.env.*"
     ],
     "win": {
       "target": "portable",

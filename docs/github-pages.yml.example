@@ -1,0 +1,38 @@
+# EXAMPLE ONLY. Does not deploy until explicitly enabled after publication approval.
+# Copy to .github/workflows/pages.yml, enable Pages (GitHub Actions), and set
+# repository Actions variable GOOGLE_WEB_CLIENT_ID (public OAuth ID).
+# Register origin https://cimc24004.github.io in the Web OAuth client first.
+name: Publish approved ToDo web app
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm run build:web
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
