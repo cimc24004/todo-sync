@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const WINDOWS_APP_ID = 'jp.local.michitodo';
+// Keep the desktop release separate from the old development taskbar group.
+const WINDOWS_APP_ID = 'jp.local.michitodo.desktop';
 
 // Quote an argv item for Windows command-line parsing, without invoking a shell.
 function quoteArgument(value) {
@@ -28,12 +29,15 @@ function createWindowIdentity({ app, platform = process.platform, env = process.
   const executable = app.isPackaged && typeof portable === 'string' && path.isAbsolute(portable) && !/[\u0000-\u001f"]/.test(portable)
     ? portable : process.execPath;
   const relaunchCommand = [executable, ...(!app.isPackaged ? [app.getAppPath()] : [])].map(quoteArgument).join(' ');
-  const details = { appId: WINDOWS_APP_ID, appIconPath, appIconIndex: 0,
+  const details = { appIconPath, appIconIndex: 0,
     relaunchCommand, relaunchDisplayName: 'Michi ToDo' };
 
   return function configureWindow(window) {
     window.setIcon(appIconPath);
+    // Windows refreshes its taskbar entry when the ID is assigned. Electron's
+    // combined call sets the ID first, so publish its icon/relaunch data first.
     window.setAppDetails(details);
+    window.setAppDetails({ appId: WINDOWS_APP_ID });
   };
 }
 
