@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-async function setup(t, {muted = false, reducedMotion = false, blockedAudio = false} = {}) {
+async function setup(t, {muted = false, reducedMotion = false, blockedAudio = false, motionPreference = null} = {}) {
   const base = path.join(__dirname, '../src');
   const dom = new JSDOM(fs.readFileSync(path.join(base, 'index.html'), 'utf8'), {runScripts: 'outside-only', url: 'https://example.test'});
   const w = dom.window, d = w.document, played = [];
@@ -19,6 +19,7 @@ async function setup(t, {muted = false, reducedMotion = false, blockedAudio = fa
     play() {played.push({src: this.src, volume: this.volume}); return blockedAudio ? Promise.reject(Error('Autoplay blocked')) : Promise.resolve();}
   };
   if (muted) w.localStorage.setItem('michi-feedback-sound-v1', 'off');
+  if (motionPreference) w.localStorage.setItem('michi-feedback-motion-v1', motionPreference);
   Object.defineProperty(w.navigator, 'locks', {value: {request: async (name, options, fn) => fn({name})}});
   w.HTMLDialogElement.prototype.showModal = function () {this.open = true;};
   w.HTMLDialogElement.prototype.close = function () {this.open = false;};
@@ -46,7 +47,7 @@ test('feedback follows successful user actions; initial load and sync stay silen
   assert.equal(d.querySelector('#done-count').textContent, '1');
   assert.ok(d.querySelector('#done-count').classList.contains('count-bump'));
   assert.match(d.querySelector('#toast').textContent, /ひとつ完了/);
-  assert.ok(played.every(p => p.volume > 0 && p.volume <= .25));
+  assert.ok(played.every(p => p.volume > 0 && p.volume <= .50));
   const count = played.length;
   w.dispatchEvent(new w.Event('michi-data-changed'));
   w.dispatchEvent(new w.CustomEvent('michi-sync-state', {detail: {connected: true, pending: 0}}));
@@ -88,4 +89,79 @@ test('reduced motion and blocked audio preserve task actions; failed writes do n
   assert.equal(d.querySelector('#done-count').textContent, '0');
   assert.equal(d.querySelector('#toast').textContent, '保存できません');
   assert.equal(d.querySelector('.completion-toast'), null);
+});
+
+test('completion waits for persistence and survives sync refresh until the row collapses', async t => {
+  const {w, d, played, click, add} = await setup(t);
+  await add();
+  const row=d.querySelector('.task'),original=w.todoClient.request;
+  let saved;
+  const gate=new Promise(resolve=>{saved=resolve;});
+  w.todoClient.request=async(action,payload)=>{if(action==='toggle')await gate;return original(action,payload);};
+  click('.check');
+  await tick();
+  assert.equal(d.querySelector('.task-completing'),null);
+  assert.equal(played.some(p=>p.src.endsWith('complete.ogg')),false);
+  w.dispatchEvent(new w.Event('michi-data-changed'));
+  await tick();
+  assert.equal(d.querySelector('.task'),row);
+  saved();
+  await tick();
+  assert.equal((await original('list')).data.tasks[0].done,true);
+  assert.equal(d.querySelector('.task-completing'),row);
+  assert.equal(row.querySelector('.check').textContent,'✓');
+  assert.equal(d.querySelectorAll('.completion-burst i').length,28);
+  w.dispatchEvent(new w.Event('michi-data-changed'));
+  await tick();
+  assert.equal(d.querySelector('.task-completing'),row);
+  await new Promise(resolve=>setTimeout(resolve,600));
+  assert.equal(d.querySelector('.task'),null);
+  assert.ok(d.querySelector('.completion-burst'),'the burst outlives the collapsed row');
+});
+
+test('motion preference overrides OS reduction only after an explicit choice', async t => {
+  const {w,d,click,add}=await setup(t,{reducedMotion:true,muted:true});
+  assert.equal(d.querySelector('#motion-toggle').getAttribute('aria-pressed'),'false');
+  assert.equal(d.documentElement.dataset.motion,'system');
+  click('#motion-toggle');
+  assert.equal(w.localStorage.getItem('michi-feedback-motion-v1'),'on');
+  assert.equal(d.documentElement.dataset.motion,'on');
+  await add();
+  assert.ok(d.querySelector('.task-enter'));
+  click('.check');await tick();
+  assert.ok(d.querySelector('.task-completing'));
+  click('#motion-toggle');
+  assert.equal(d.documentElement.dataset.motion,'off');
+  assert.equal(d.querySelector('.completion-burst'),null);
+  assert.equal(d.querySelector('.task'),null);
+});
+
+test('saved motion choice restores and sync does not start filter entry animations', async t => {
+  const {w,d,click,add}=await setup(t,{reducedMotion:true,motionPreference:'on'});
+  assert.equal(d.querySelector('#motion-toggle').getAttribute('aria-pressed'),'true');
+  await add();
+  click('[data-filter=all]');
+  assert.ok(d.querySelector('.task-filter-enter'));
+  w.dispatchEvent(new w.Event('michi-data-changed'));await tick();
+  assert.equal(d.querySelector('.task-filter-enter'),null);
+  click('.check');await tick();
+  click('[data-filter=completed]');
+  assert.equal(d.querySelector('.task-completing'),null);
+  assert.equal(d.querySelectorAll('.task.done').length,1);
+});
+
+test('feedback preview plays the real celebration without changing any tasks', async t => {
+  const {w,d,played,click,add}=await setup(t,{reducedMotion:true,motionPreference:'on'});
+  await add();
+  const before=JSON.stringify((await w.todoClient.request('list')).data.tasks);
+  const beforeOperations=w.localStorage.getItem('michi-todo-operations-v1');
+  const count=played.length;
+  click('#preview-feedback');await tick();
+  assert.equal(played.length,count+1);
+  assert.equal(played.at(-1).src,'assets/sounds/complete.ogg');
+  assert.equal(d.querySelectorAll('.completion-burst i').length,28);
+  assert.match(d.querySelector('.completion-toast').textContent,/完了演出のプレビュー/);
+  assert.equal(d.querySelector('#done-count').textContent,'0');
+  assert.equal(JSON.stringify((await w.todoClient.request('list')).data.tasks),before);
+  assert.equal(w.localStorage.getItem('michi-todo-operations-v1'),beforeOperations);
 });

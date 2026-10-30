@@ -4,12 +4,29 @@ Author: Kenney (www.kenney.nl)
 Pack: Interface Sounds 1.0 (2020)
 Source: https://kenney.nl/assets/interface-sounds
 Downloaded from the creator's free download on 2026-10-30.
+Feedback variations prepared on 2026-10-31.
 License: Creative Commons Zero 1.0 Universal (CC0-1.0)
 https://creativecommons.org/publicdomain/zero/1.0/
 
-click.ogg = Audio/click_001.ogg (unchanged, about 0.10 seconds)
-complete.ogg = Audio/confirmation_001.ogg (unchanged, about 0.29 seconds)
+click.ogg derives from Audio/bong_001.ogg (about 0.072 seconds).
+Changes: mono mix, playback pitch/rate raised by 1.7x, 120 Hz high-pass
+(2nd-order Butterworth), 2400 Hz low-pass (3rd-order Butterworth),
+3 ms attack and 18 ms release fades, peak normalized to 0.58.
+
+complete.ogg derives from Audio/pluck_001.ogg (0.420 seconds).
+Changes: mono mix, 100 Hz high-pass (2nd-order Butterworth), 1000 Hz
+low-pass (4th-order Butterworth), 3 ms attack and 18 ms release fades.
+The source A4 pluck is followed at 120 ms by a 1.5x-pitched E5 pluck;
+relative gains are 0.78 and 1.0. Quiet copies at 55/100/160/220 ms use
+gains 0.13/0.06/0.025/0.012 to soften the decay. The finished mix has
+a 25 ms end fade and is peak-normalized to 0.72. No oscillator is added.
+
+Both variations are Ogg Vorbis at the source sample rate. Processing uses
+SciPy resample_poly / butter / sosfilt, sine-squared fade-in and
+cosine-squared fade-out, and SoundFile Ogg Vorbis encoding.
 
 These sounds may be used and redistributed in personal and commercial
 projects. Attribution is optional. Original pack notice: Kenney-LICENSE.txt.
-The application lowers playback volume; the source audio is unmodified.
+The variations retain the source pack's CC0 dedication. The application
+also lowers playback volume. These are edited website sound assets;
+no newly synthesized sound source is used.
