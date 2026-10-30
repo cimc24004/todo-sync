@@ -6,6 +6,8 @@ dist/
 !.env.example
 credentials*.json
 client_secret*.json
+google-desktop-client.json
+google-refresh-token.enc
 *token*.json
 operations.json
 tasks.json

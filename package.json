@@ -26,8 +26,9 @@
       "!**/.env.*"
     ],
     "win": {
+      "icon": "src/assets/app-icon.ico",
       "target": "portable",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true
     },
     "artifactName": "Michi-ToDo-${version}-Windows-x64.${ext}"
   },

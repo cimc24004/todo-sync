@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist/web",
+  "installCommand": "node -e \"console.log('Build and API use Node built-ins only')\"",
+  "functions": {
+    "api/google.js": {
+      "maxDuration": 60,
+      "includeFiles": "{server/**,src/desktop/drive-proxy.cjs,src/sync-core.js}"
+    }
+  },
+  "headers": [
+    { "source": "/config.js", "headers": [{ "key": "Cache-Control", "value": "no-store" }] },
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+  ]
+}

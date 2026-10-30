@@ -1,0 +1,15 @@
+Michi ToDo sound effects
+
+Author: Kenney (www.kenney.nl)
+Pack: Interface Sounds 1.0 (2020)
+Source: https://kenney.nl/assets/interface-sounds
+Downloaded from the creator's free download on 2026-10-30.
+License: Creative Commons Zero 1.0 Universal (CC0-1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+click.ogg = Audio/click_001.ogg (unchanged, about 0.10 seconds)
+complete.ogg = Audio/confirmation_001.ogg (unchanged, about 0.29 seconds)
+
+These sounds may be used and redistributed in personal and commercial
+projects. Attribution is optional. Original pack notice: Kenney-LICENSE.txt.
+The application lowers playback volume; the source audio is unmodified.
