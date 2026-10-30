@@ -17,6 +17,9 @@ Final prompt:
 
 The generated source is 1254 × 1254 pixels; the derived outputs have the exact
 dimensions encoded in their names. ICO contains 16, 32, 48, and 256 pixel frames.
+Every ICO frame uses a 40-byte BITMAPINFOHEADER, bottom-up 32-bit BGRA pixels,
+and a DWORD-aligned 1-bit AND mask. Classic uncompressed DIB frames are used
+instead of PNG-compressed frames for compatibility with Windows icon loaders.
 
 Sound effect source and licensing are recorded in `sounds/LICENSE.txt` and
 `sounds/Kenney-LICENSE.txt`.

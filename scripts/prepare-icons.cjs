@@ -22,7 +22,32 @@ if (typeof electron === 'string') {
       fs.writeFileSync(path.join(directory, `app-icon-${size}.png`), png(size));
     }
     const sizes = [16, 32, 48, 256];
-    const frames = sizes.map(png);
+    // Windows icon loaders also need the classic DIB representation. NativeImage
+    // provides top-down BGRA pixels; ICO stores bottom-up BGRA plus a 1-bit AND mask.
+    const dib = size => {
+      const pixels = source.resize({width: size, height: size, quality: 'best'}).toBitmap();
+      if (pixels.length !== size * size * 4) throw Error(`Unexpected bitmap size for ${size}px icon.`);
+      const maskStride = Math.ceil(size / 32) * 4;
+      const colorBytes = size * size * 4;
+      const frame = Buffer.alloc(40 + colorBytes + maskStride * size);
+      frame.writeUInt32LE(40, 0); // BITMAPINFOHEADER
+      frame.writeInt32LE(size, 4);
+      frame.writeInt32LE(size * 2, 8); // XOR bitmap plus AND mask height
+      frame.writeUInt16LE(1, 12);
+      frame.writeUInt16LE(32, 14);
+      frame.writeUInt32LE(colorBytes + maskStride * size, 20);
+      for (let y = 0; y < size; y++) {
+        const bottomRow = size - y - 1;
+        pixels.copy(frame, 40 + bottomRow * size * 4, y * size * 4, (y + 1) * size * 4);
+        for (let x = 0; x < size; x++) {
+          if (pixels[(y * size + x) * 4 + 3] < 128) {
+            frame[40 + colorBytes + bottomRow * maskStride + (x >> 3)] |= 0x80 >> (x & 7);
+          }
+        }
+      }
+      return frame;
+    };
+    const frames = sizes.map(dib);
     const header = Buffer.alloc(6 + sizes.length * 16);
     header.writeUInt16LE(1, 2);
     header.writeUInt16LE(sizes.length, 4);
