@@ -16,13 +16,12 @@ function playSound(name){
 function updateSoundButton(){const b=$('#sound-toggle');b.textContent=soundEnabled?'♪ 操作音オン':'♪ 操作音オフ';b.setAttribute('aria-pressed',String(soundEnabled));const label=soundEnabled?'操作音をオフにする':'操作音をオンにする';b.setAttribute('aria-label',label);b.title=label;}
 $('#sound-toggle').onclick=()=>{soundEnabled=!soundEnabled;try{localStorage.setItem(soundKey,soundEnabled?'on':'off');}catch{}if(!soundEnabled)Object.values(sounds).forEach(clip=>clip.pause());updateSoundButton();if(soundEnabled)playSound('click');};
 updateSoundButton();
-const motionKey='michi-feedback-motion-v1',systemMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
-let motionPreference=null;try{const value=localStorage.getItem(motionKey);if(value==='on'||value==='off')motionPreference=value;}catch{}
-const reducedMotion=()=>motionPreference==='off'||(motionPreference!=='on'&&!!systemMotion?.matches);
-let completion=null;
-function updateMotionButton(){const enabled=!reducedMotion(),b=$('#motion-toggle');document.documentElement.dataset.motion=motionPreference||'system';b.textContent=`動き${enabled?'オン':'オフ'}${motionPreference?'':'（OS設定）'}`;b.setAttribute('aria-pressed',String(enabled));b.setAttribute('aria-label',`アニメーションを${enabled?'オフ':'オン'}にする`);b.title=motionPreference?'このアプリの動きを切り替えます':'OSのアニメーション設定に従っています';}
+const motionKey='michi-feedback-motion-v1';
+let motionPreference='on';try{const value=localStorage.getItem(motionKey);if(value==='off')motionPreference='off';}catch{}
+const reducedMotion=()=>motionPreference==='off';
+let completion=null,openingPlayed=false;
+function updateMotionButton(){const enabled=!reducedMotion(),b=$('#motion-toggle');document.documentElement.dataset.motion=motionPreference;b.textContent=`動き${enabled?'オン':'オフ'}`;b.setAttribute('aria-pressed',String(enabled));b.setAttribute('aria-label',`アニメーションを${enabled?'オフ':'オン'}にする`);b.title='このアプリの動きを切り替えます';}
 $('#motion-toggle').onclick=()=>{motionPreference=reducedMotion()?'on':'off';try{localStorage.setItem(motionKey,motionPreference);}catch{}updateMotionButton();if(reducedMotion()){document.querySelectorAll('.completion-burst').forEach(b=>b.remove());cancelCompletion();render();}else animate($('#motion-toggle'),'control-pop');};
-systemMotion?.addEventListener?.('change',()=>{updateMotionButton();if(reducedMotion()){cancelCompletion();render();}});
 updateMotionButton();
 function animate(element,name){if(!element||reducedMotion())return;element.classList.remove(name);void element.offsetWidth;element.classList.add(name);const finish=e=>{if(e.target!==element)return;element.classList.remove(name);element.removeEventListener('animationend',finish);};element.addEventListener('animationend',finish);}
 function taskRow(id){return Array.from(document.querySelectorAll('.task')).find(item=>item.dataset.taskId===id);}
@@ -50,9 +49,8 @@ function celebrateRow(current){
  current.burst=completionBurst(check);
  current.timer=setTimeout(()=>finishCompletion(current),560);
 }
-$('#preview-feedback').onclick=()=>{playSound('complete');animate($('#preview-feedback'),'control-pop');completionBurst($('#preview-feedback'));toast('完了演出のプレビュー',true);};
 function matches(t,f){if(f==='trash')return !!t.deletedAt;if(t.deletedAt)return false;if(f==='completed')return t.done;if(t.done)return false;if(f==='today')return t.due&&t.due<=today();if(f==='upcoming')return t.due>today();return true;}
-async function request(action,payload){const result=await window.todoClient.request(action,payload);if(!result.ok)throw Error(result.error);tasks=result.data.tasks;$('#warning').hidden=!result.data.warning;$('#warning').textContent=result.data.warning;render();}
+async function request(action,payload){const result=await window.todoClient.request(action,payload);if(!result.ok)throw Error(result.error);tasks=result.data.tasks;$('#warning').hidden=!result.data.warning;$('#warning').textContent=result.data.warning;const opening=action==='list'&&!openingPlayed;if(opening)openingPlayed=true;render(opening);if(opening){animate($('header'),'opening-header');animate($('.summary'),'opening-summary');}}
 function toast(text,complete=false){$('#toast').textContent=text;if(complete){const badge=document.createElement('span');badge.className='completion-badge';badge.textContent='✓';badge.setAttribute('aria-hidden','true');$('#toast').prepend(badge);}$('#toast').classList.toggle('completion-toast',complete);$('#toast').hidden=false;animate($('#toast'),'toast-enter');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,3500);}
 function button(text,cls,handler,label){const b=document.createElement('button');b.textContent=text;b.className=cls;b.type='button';if(label)b.setAttribute('aria-label',label);b.onclick=handler;return b;}
 async function change(action,id){
