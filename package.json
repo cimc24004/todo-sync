@@ -1,0 +1,34 @@
+{
+  "name": "michi-todo",
+  "version": "1.0.0",
+  "description": "Google Drive\u540c\u671f\u5bfe\u5fdc\u306e\u65e5\u672c\u8a9eToDo\u30a2\u30d7\u30ea\uff08Web/PWA + Electron\uff09",
+  "main": "src/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "build:win": "electron-builder --win portable --x64",
+    "build:web": "node scripts/build-web.cjs"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "^26.0.12",
+    "jsdom": "30.1.3"
+  },
+  "build": {
+    "appId": "jp.local.michitodo",
+    "productName": "Michi ToDo",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "artifactName": "Michi-ToDo-${version}-Windows-x64.${ext}"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
