@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {reminderCandidates,sanitizeSnapshot}=require('./reminders.cjs');
-function createDesktopFeatures({electron,mainWindow,userData,readTasks}){
+function createDesktopFeatures({electron,mainWindow,userData,readTasks,configureWindow=()=>{}}){
  const {app,BrowserWindow,Tray,Menu,nativeImage,globalShortcut,Notification,ipcMain}=electron;
  const file=path.join(userData,'desktop-settings.json');
  let state={notifications:false,closeToTray:true,sent:{}},error='',quitting=false,compact=null,tray=null,shortcut=false;
@@ -10,7 +10,7 @@ function createDesktopFeatures({electron,mainWindow,userData,readTasks}){
  function save(){try{fs.writeFileSync(file+'.tmp',JSON.stringify(state));fs.renameSync(file+'.tmp',file);return true;}catch{error='デスクトップ設定を保存できません。';return false;}}
  function show(event){if(mainWindow.isDestroyed())return;if(mainWindow.isMinimized())mainWindow.restore();mainWindow.show();mainWindow.focus();if(event)mainWindow.webContents.send('desktop-event',event);}
  const compactURL=pathToFileURL(path.join(__dirname,'compact.html')).href;
- function openCompact(){if(compact&&!compact.isDestroyed()){compact.show();compact.focus();return;}compact=new BrowserWindow({width:380,height:510,minWidth:300,minHeight:280,alwaysOnTop:true,title:'今日 • Michi',backgroundColor:'#f5f5ee',icon:path.join(__dirname,'../assets/app-icon-256.png'),webPreferences:{preload:path.join(__dirname,'compact-preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});compact.removeMenu();compact.webContents.setWindowOpenHandler(()=>({action:'deny'}));compact.webContents.on('will-navigate',e=>e.preventDefault());compact.loadURL(compactURL);compact.on('closed',()=>compact=null);}
+ function openCompact(){if(compact&&!compact.isDestroyed()){compact.show();compact.focus();return;}compact=new BrowserWindow({show:false,width:380,height:510,minWidth:300,minHeight:280,alwaysOnTop:true,title:'今日 • Michi',backgroundColor:'#f5f5ee',icon:path.join(__dirname,'../assets/app-icon-256.png'),webPreferences:{preload:path.join(__dirname,'compact-preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});const current=compact;configureWindow(current);current.once('ready-to-show',()=>{if(!current.isDestroyed())current.show();});compact.removeMenu();compact.webContents.setWindowOpenHandler(()=>({action:'deny'}));compact.webContents.on('will-navigate',e=>e.preventDefault());compact.loadURL(compactURL);compact.on('closed',()=>compact=null);}
  function rows(){try{return sanitizeSnapshot(readTasks());}catch{return [];}}
  ipcMain.handle('desktop-compact',(e,action)=>{if(!compact||e.sender!==compact.webContents||e.senderFrame!==compact.webContents.mainFrame||e.senderFrame.url!==compactURL)throw Error('アクセスできません。');if(action==='list')return rows();if(action==='open'){show('today');return null;}throw Error('操作が正しくありません。');});
  function status(){let startup=false;try{if(process.platform==='win32')startup=app.getLoginItemSettings().openAtLogin;}catch{}return {notifications:state.notifications,notificationSupported:Notification.isSupported(),closeToTray:state.closeToTray,trayAvailable:!!tray,shortcutAvailable:shortcut,shortcut:'Ctrl+Shift+Space',startup,startupSupported:process.platform==='win32'&&app.isPackaged,error};}
