@@ -4,11 +4,12 @@
  const serverMode=!window.todo&&window.MICHI_CONFIG?.googleAuthMode==='server';
  const managedSession=()=>Boolean(window.todo?.driveAuth||serverMode);
  const key='michi-todo-operations-v1';let data=null,token='',syncing=false,accountReady=false,lockPromise=null,loadPromise=null,connectPromise=null,connectKind='',queuedConnectPromise=null,disconnectPromise=null,authGeneration=0,expiryTimer=null,lastSync=0,syncError='',allowRestore=true,startupRestoreStarted=false;
- const emit=()=>window.dispatchEvent(new CustomEvent('michi-sync-state',{detail:{pending:data?.pending.length||0,syncing,connected:accountReady,lastSync,error:syncError}}));
+ let syncController=null,syncProgress='';
+ const emit=()=>window.dispatchEvent(new CustomEvent('michi-sync-state',{detail:{pending:data?.pending.length||0,syncing,connected:accountReady,lastSync,error:syncError,progress:syncProgress}}));
  async function save(next){if(window.todo) {const r=await window.todo.request('cache-save',next);if(!r.ok)throw Error(r.error);}else localStorage.setItem(key,JSON.stringify(next));data=next;emit();}
  function load(){if(data)return Promise.resolve();if(!loadPromise)loadPromise=loadData().finally(()=>{loadPromise=null;});return loadPromise;}
  async function loadData(){if(!window.todo){if(!lockPromise)lockPromise=new Promise((resolve,reject)=>{if(!navigator.locks)return reject(Error('このブラウザでは安全な保存ロックが使えません。最新のChrome等で開いてください。'));navigator.locks.request('michi-todo-single-tab',{ifAvailable:true},lock=>{if(!lock){reject(Error('このアプリは別のタブで開いています。そちらを閉じて再読み込みしてください。'));return;}resolve();return new Promise(()=>{});}).catch(reject);});await lockPromise;}let raw;if(window.todo){const r=await window.todo.request('cache-load');if(!r.ok)throw Error(r.error);raw=r.data;}else raw=JSON.parse(localStorage.getItem(key)||'null');if(raw){window.MichiSync.merge(raw.ops);if(!Array.isArray(raw.pending)||raw.pending.some(id=>typeof id!=='string'||!raw.ops.some(o=>o.id===id))||typeof raw.device!=='string')throw Error('保存データが不正です。上書きせず停止しました。');data=raw;}else await save({device:crypto.randomUUID(),ops:[],pending:[]});}
- const drive=new window.MichiDrive(async()=>token,()=>accountReady?data?.account:'');
+ const drive=new window.MichiDrive(async()=>token,()=>accountReady?data?.account:'',()=>syncController?.signal);
  async function serverSession(action){
   const response=await (action==='disconnect'?window.MichiServerAuth.disconnect():window.MichiServerAuth.request('session'));
   if(action==='session'&&response.status===401)return {ok:true,data:{connected:false}};
@@ -19,21 +20,24 @@
  async function sync(){
   if(syncing)return;await load();if(syncing)return;if(!token||!accountReady)throw Error('Google Driveに接続してください。');
   const generation=authGeneration;const assertCurrent=()=>{if(generation!==authGeneration||!accountReady)throw Error('Google接続をキャンセルしました。');};
-  syncing=true;syncError='';emit();
+  syncController=new AbortController();syncing=true;syncError='';syncProgress='同期中…（一覧を確認）';emit();
   try{
-   const files=await drive.list();assertCurrent();const known=new Set(data.knownFiles||[]);const newFiles=files.filter(f=>!known.has(f.id));const downloaded=await drive.pull(newFiles);assertCurrent();
+   const files=await drive.list();assertCurrent();const known=new Set(data.knownFiles||[]);const newFiles=files.filter(f=>!known.has(f.id));
+   syncProgress=`同期中…（受信 0/${newFiles.length}）`;emit();
+   const downloaded=await drive.pull(newFiles,(done,total)=>{assertCurrent();syncProgress=`同期中…（受信 ${done}/${total}）`;emit();});assertCurrent();
    const remote=window.MichiSync.merge(data.ops.filter(o=>!data.pending.includes(o.id)),downloaded);const remoteIds=new Set(remote.map(o=>o.id));
    await save({...data,ops:window.MichiSync.merge(data.ops,remote),knownFiles:[...new Set([...(data.knownFiles||[]),...files.map(f=>f.id)])],pending:data.pending.filter(id=>!remoteIds.has(id))});assertCurrent();
-   for(const id of [...data.pending]){const op=data.ops.find(o=>o.id===id);await drive.push(op);assertCurrent();await save({...data,pending:data.pending.filter(x=>x!==id)});assertCurrent();}
+   const pending=[...data.pending];let sent=0;
+   for(const id of pending){syncProgress=`同期中…（送信 ${sent}/${pending.length}）`;emit();const op=data.ops.find(o=>o.id===id);await drive.push(op);assertCurrent();await save({...data,pending:data.pending.filter(x=>x!==id)});assertCurrent();sent++;}
    lastSync=Date.now();window.dispatchEvent(new Event('michi-data-changed'));
   }catch(e){
    if(generation===authGeneration){
     syncError=e.message;
     if(window.todo?.driveAuth){try{const result=await window.todo.driveAuth('status');const identity=result.data?.identity||result.data?.account;if(generation===authGeneration&&result.ok&&(!result.data.connected||identity?.sub!==data.account)){token='';accountReady=false;}}catch(_){} }
-    else if(serverMode&&e.authRequired){token='';accountReady=false;}
+    else if(e.authRequired){token='';accountReady=false;clearTimeout(expiryTimer);}
    }
    throw e;
-  }finally{syncing=false;emit();}
+  }finally{syncController=null;syncing=false;syncProgress='';emit();}
  }
  async function forgetManagedSession(){if(window.todo?.driveAuth){const result=await window.todo.driveAuth('disconnect');if(!result.ok)throw Error(result.error||'Google接続を解除できませんでした。');}else if(serverMode)await serverSession('disconnect');}
  async function connectFlow(restoreOnly=false){
@@ -60,7 +64,7 @@
    const result=await new Promise((resolve,reject)=>{const client=google.accounts.oauth2.initTokenClient({client_id:id,scope:'https://www.googleapis.com/auth/drive.appdata openid email',callback:r=>r.error?reject(Error(r.error)):resolve(r),error_callback:e=>reject(Error(e.type||'ログインを完了できませんでした。'))});client.requestAccessToken({prompt:''});});assertCurrent();
    if(!result.access_token||!Number.isFinite(Number(result.expires_in)))throw Error('ログイン結果を確認できませんでした。');
    candidateToken=result.access_token;candidateExpiry=Date.now()+Number(result.expires_in)*1000;
-   account=await(await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:`Bearer ${candidateToken}`}})).json();assertCurrent();
+   account=await window.MichiNetwork.run(async signal=>{const response=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{signal,headers:{Authorization:`Bearer ${candidateToken}`}});if(!response.ok)throw Error('Googleアカウントを確認できませんでした。再接続してください。');return response.json();});assertCurrent();
   }
   if(!account?.sub)throw Error('Googleアカウントを確認できませんでした。');await load();assertCurrent();
   if(data.account&&data.account!==account.sub){allowRestore=false;await forgetManagedSession();throw Error('この端末の保存先とは別のGoogleアカウントです。元のアカウントで接続してください。');}
@@ -85,7 +89,7 @@
  }
  function restore(){if(!managedSession()||!allowRestore||accountReady)return Promise.resolve();if(connectPromise)return connectPromise;return startConnection(true);}
  function disconnect(){
-  authGeneration++;allowRestore=false;clearTimeout(expiryTimer);token='';accountReady=false;lastSync=0;syncError='';emit();
+  authGeneration++;allowRestore=false;clearTimeout(expiryTimer);token='';accountReady=false;lastSync=0;syncError='';syncController?.abort(Error('Google接続をキャンセルしました。'));emit();
   if(!managedSession())return Promise.resolve();
   const generation=authGeneration;
   const promise=forgetManagedSession().catch(error=>{if(generation===authGeneration){syncError=error.message;emit();window.dispatchEvent(new CustomEvent('michi-sync-error',{detail:error.message}));}}).finally(()=>{if(disconnectPromise===promise)disconnectPromise=null;});

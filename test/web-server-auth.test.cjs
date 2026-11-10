@@ -19,7 +19,7 @@ function setup(t, { account = 'account-a', initialCache, sessionResult = session
   let lastState, prompts = 0;
   storage.set(cacheKey, JSON.stringify(initialCache || { device: 'web-1', ops: [], pending: [], ...(account ? { account } : {}) }));
   const w = {
-    MICHI_CONFIG: { googleAuthMode: 'server' }, crypto: webcrypto, URL, URLSearchParams, Response, Event, CustomEvent, AbortSignal,
+    MICHI_CONFIG: { googleAuthMode: 'server' }, crypto: webcrypto, URL, URLSearchParams, Response, Event, CustomEvent, AbortSignal, AbortController,
     location: { assign: url => navigations.push(url) },
     navigator: { locks: { request: (name, options, callback) => callback({ name }) } },
     document: { createElement() { throw Error('Server mode must not load Google JavaScript'); } },
