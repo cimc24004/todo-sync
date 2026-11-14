@@ -71,7 +71,7 @@ test('disconnect aborts a pending read and late response cannot start another do
   const controller = new AbortController();
   let finish;
   const f = setup({ fetch: () => new Promise(resolve => { finish = resolve; }) });
-  const pending = f.drive(controller.signal).pull([{ id: 'first' }, { id: 'second' }]);
+  const pending = f.drive(controller.signal).pull([{ id: 'first', name: 'michi-op-op-1.json' }, { id: 'second', name: 'michi-op-op-1.json' }]);
   const rejected = assert.rejects(pending, { code: 'NETWORK_CANCELLED' });
   await tick(); controller.abort(); await rejected;
   finish(json(operation)); await tick();
@@ -138,7 +138,7 @@ test('timeout and cancellation work when AbortSignal.timeout and any are unavail
 
 test('pull reports completed files while retaining deterministic operation merging', async () => {
   const f = setup({ fetch: async () => json(operation) }), progress = [];
-  const result = await f.drive().pull([{ id: 'one' }, { id: 'duplicate' }], (done, total) => progress.push([done, total]));
+  const result = await f.drive().pull([{ id: 'one', name: 'michi-op-op-1.json' }, { id: 'duplicate', name: 'michi-op-op-1.json' }], (done, total) => progress.push([done, total]));
   assert.equal(result.length, 1);
   assert.deepEqual(progress, [[1, 2], [2, 2]]);
 });

@@ -76,7 +76,7 @@ test('stalled upload body preserves the pending task and never reports success',
 
 test('disconnect cancels a stalled Web read, restores local edits and ignores its late response', async () => {
   let finishRead, stalled = true;
-  const f = setup(() => stalled ? new Promise(resolve => { finishRead = resolve; }) : json({ files: [] }));
+  const f = setup((url, options) => stalled ? new Promise(resolve => { finishRead = resolve; }) : json(options.method === 'POST' ? { id: 'saved-file' } : { files: [] }));
   const connecting = f.w.todoClient.connect(), cancelled = assert.rejects(connecting, /キャンセル/);
   await tick(); const signal = f.requests.at(-1).options.signal;
   await f.w.todoClient.disconnect(); await cancelled;
@@ -109,7 +109,7 @@ test('Web 401 preserves pending data and enables a fresh Google connection', asy
 test('initial Web download reports completed counts and caches only verified files', async () => {
   const op = { id: 'op-1', taskId: 'task-1', device: 'other-device', clock: 1,
     patch: { title: 'remote task', priority: 'normal' } };
-  const f = setup(url => url.includes('?alt=media') ? json(op) : json({ files: [{ id: 'file-1' }] }));
+  const f = setup(url => url.includes('?alt=media') ? json(op) : json({ files: [{ id: 'file-1', name: 'michi-op-op-1.json' }] }));
   await f.w.todoClient.connect();
   assert.ok(f.states.some(state => state.progress === '同期中…（受信 1/1）'));
   assert.deepEqual(f.cache.knownFiles, ['file-1']);
