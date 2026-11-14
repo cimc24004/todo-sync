@@ -6,9 +6,19 @@
  const key='michi-todo-operations-v1';let data=null,token='',syncing=false,accountReady=false,lockPromise=null,loadPromise=null,connectPromise=null,connectKind='',queuedConnectPromise=null,disconnectPromise=null,authGeneration=0,expiryTimer=null,lastSync=0,syncError='',allowRestore=true,startupRestoreStarted=false;
  let syncController=null,syncProgress='';
  const emit=()=>window.dispatchEvent(new CustomEvent('michi-sync-state',{detail:{pending:data?.pending.length||0,syncing,connected:accountReady,lastSync,error:syncError,progress:syncProgress}}));
+ function verifiedFiles(raw,ops){
+  if(raw===undefined)return [];
+  if(!Array.isArray(raw)||raw.length>100000)throw Error('同期ファイル情報が不正です。');
+  const ids=new Set(ops.map(op=>op.id)),files=new Map();
+  for(const item of raw){
+   if(!item||typeof item.fileId!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(item.fileId)||typeof item.opId!=='string'||!item.opId||!ids.has(item.opId)||(files.has(item.fileId)&&files.get(item.fileId)!==item.opId))throw Error('同期ファイル情報が不正です。');
+   files.set(item.fileId,item.opId);
+  }
+  return [...files].map(([fileId,opId])=>({fileId,opId}));
+ }
  async function save(next){if(window.todo) {const r=await window.todo.request('cache-save',next);if(!r.ok)throw Error(r.error);}else localStorage.setItem(key,JSON.stringify(next));data=next;emit();}
  function load(){if(data)return Promise.resolve();if(!loadPromise)loadPromise=loadData().finally(()=>{loadPromise=null;});return loadPromise;}
- async function loadData(){if(!window.todo){if(!lockPromise)lockPromise=new Promise((resolve,reject)=>{if(!navigator.locks)return reject(Error('このブラウザでは安全な保存ロックが使えません。最新のChrome等で開いてください。'));navigator.locks.request('michi-todo-single-tab',{ifAvailable:true},lock=>{if(!lock){reject(Error('このアプリは別のタブで開いています。そちらを閉じて再読み込みしてください。'));return;}resolve();return new Promise(()=>{});}).catch(reject);});await lockPromise;}let raw;if(window.todo){const r=await window.todo.request('cache-load');if(!r.ok)throw Error(r.error);raw=r.data;}else raw=JSON.parse(localStorage.getItem(key)||'null');if(raw){window.MichiSync.merge(raw.ops);if(!Array.isArray(raw.pending)||raw.pending.some(id=>typeof id!=='string'||!raw.ops.some(o=>o.id===id))||typeof raw.device!=='string')throw Error('保存データが不正です。上書きせず停止しました。');data=raw;}else await save({device:crypto.randomUUID(),ops:[],pending:[]});}
+ async function loadData(){if(!window.todo){if(!lockPromise)lockPromise=new Promise((resolve,reject)=>{if(!navigator.locks)return reject(Error('このブラウザでは安全な保存ロックが使えません。最新のChrome等で開いてください。'));navigator.locks.request('michi-todo-single-tab',{ifAvailable:true},lock=>{if(!lock){reject(Error('このアプリは別のタブで開いています。そちらを閉じて再読み込みしてください。'));return;}resolve();return new Promise(()=>{});}).catch(reject);});await lockPromise;}let raw;if(window.todo){const r=await window.todo.request('cache-load');if(!r.ok)throw Error(r.error);raw=r.data;}else raw=JSON.parse(localStorage.getItem(key)||'null');if(raw){window.MichiSync.merge(raw.ops);if(!Array.isArray(raw.pending)||raw.pending.some(id=>typeof id!=='string'||!raw.ops.some(o=>o.id===id))||typeof raw.device!=='string')throw Error('保存データが不正です。上書きせず停止しました。');if(raw.verifiedFiles!==undefined)raw.verifiedFiles=verifiedFiles(raw.verifiedFiles,raw.ops);data=raw;}else await save({device:crypto.randomUUID(),ops:[],pending:[]});}
  const drive=new window.MichiDrive(async()=>token,()=>accountReady?data?.account:'',()=>syncController?.signal);
  async function serverSession(action){
   const response=await (action==='disconnect'?window.MichiServerAuth.disconnect():window.MichiServerAuth.request('session'));
@@ -22,13 +32,26 @@
   const generation=authGeneration;const assertCurrent=()=>{if(generation!==authGeneration||!accountReady)throw Error('Google接続をキャンセルしました。');};
   syncController=new AbortController();syncing=true;syncError='';syncProgress='同期中…（一覧を確認）';emit();
   try{
-   const files=await drive.list();assertCurrent();const known=new Set(data.knownFiles||[]);const newFiles=files.filter(f=>!known.has(f.id));
+   const files=await drive.list();assertCurrent();
+   // Legacy knownFiles lacks the operation ID, so establish its provenance once.
+   const known=new Map(verifiedFiles(data.verifiedFiles,data.ops).map(item=>[item.fileId,item.opId]));
+   const verified=new Map(),newFiles=[];
+   for(const file of files){const opId=known.get(file.id);if(opId&&file.name===`michi-op-${opId}.json`)verified.set(file.id,opId);else newFiles.push(file);}
    syncProgress=`同期中…（受信 0/${newFiles.length}）`;emit();
-   const downloaded=await drive.pull(newFiles,(done,total)=>{assertCurrent();syncProgress=`同期中…（受信 ${done}/${total}）`;emit();});assertCurrent();
-   const remote=window.MichiSync.merge(data.ops.filter(o=>!data.pending.includes(o.id)),downloaded);const remoteIds=new Set(remote.map(o=>o.id));
-   await save({...data,ops:window.MichiSync.merge(data.ops,remote),knownFiles:[...new Set([...(data.knownFiles||[]),...files.map(f=>f.id)])],pending:data.pending.filter(id=>!remoteIds.has(id))});assertCurrent();
+   const downloaded=await drive.pull(newFiles,(done,total)=>{assertCurrent();syncProgress=`同期中…（受信 ${done}/${total}）`;emit();},(file,op)=>{assertCurrent();verified.set(file.id,op.id);});assertCurrent();
+   if(verified.size!==files.length)throw Error('Driveの履歴を確認できませんでした。ローカルの変更は保持しています。');
+   const ops=window.MichiSync.merge(data.ops,downloaded),remoteIds=new Set(verified.values());
+   // A prior upload acknowledgement is not proof that its file still exists.
+   // Queue the original missing operations before sending; never alter clocks.
+   await save({...data,ops,knownFiles:[...verified.keys()],verifiedFiles:[...verified].map(([fileId,opId])=>({fileId,opId})),pending:ops.filter(op=>!remoteIds.has(op.id)).map(op=>op.id)});assertCurrent();
    const pending=[...data.pending];let sent=0;
-   for(const id of pending){syncProgress=`同期中…（送信 ${sent}/${pending.length}）`;emit();const op=data.ops.find(o=>o.id===id);await drive.push(op);assertCurrent();await save({...data,pending:data.pending.filter(x=>x!==id)});assertCurrent();sent++;}
+   for(const id of pending){
+    syncProgress=`同期中…（送信 ${sent}/${pending.length}）`;emit();
+    const op=data.ops.find(o=>o.id===id),receipt=await drive.push(op);assertCurrent();
+    if(!receipt||typeof receipt.id!=='string'||!/^[A-Za-z0-9_-]{1,200}$/.test(receipt.id)||(verified.has(receipt.id)&&verified.get(receipt.id)!==id))throw Error('Driveへの保存結果を確認できませんでした。ローカルの変更は保持しています。');
+    verified.set(receipt.id,id);
+    await save({...data,pending:data.pending.filter(x=>x!==id),knownFiles:[...verified.keys()],verifiedFiles:[...verified].map(([fileId,opId])=>({fileId,opId}))});assertCurrent();sent++;
+   }
    lastSync=Date.now();window.dispatchEvent(new Event('michi-data-changed'));
   }catch(e){
    if(generation===authGeneration){

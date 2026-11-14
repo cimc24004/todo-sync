@@ -6,6 +6,23 @@ test('finished, trashed, invalid and already past days do not alert',()=>{const 
 test('snapshot strips extra data and rejects oversized or malformed tasks',()=>{assert.deepEqual(sanitizeSnapshot([{...task,notes:'secret',url:'https://example.com'}]),[task]);assert.throws(()=>sanitizeSnapshot([{...task,title:7}]));assert.throws(()=>sanitizeSnapshot(Array(20001)));});
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');const {OperationCache,validateCache}=require('../src/desktop/cache.cjs');
 test('cache stores and reloads metadata and blocks invalid pending refs',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'michi-cache-'));try{const c=new OperationCache(dir),value={device:'device1',ops:[],pending:[],account:'123',knownFiles:['file1']};assert.equal(c.load(),null);c.save(value);assert.deepEqual(c.load(),value);assert.throws(()=>validateCache({...value,pending:['unknown']}));}finally{fs.rmSync(dir,{recursive:true});}});
+test('cache preserves verified file provenance while accepting legacy caches',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'michi-verified-cache-'));
+ try{
+  const c=new OperationCache(dir),op={id:'op-one',taskId:'task',device:'pc',clock:1,patch:{title:'saved'}};
+  const legacy={device:'pc',ops:[op],pending:[],knownFiles:['file-one']};
+  c.save(legacy);assert.equal(Object.hasOwn(c.load(),'verifiedFiles'),false);
+  const value={...legacy,verifiedFiles:[{fileId:'file-one',opId:op.id},{fileId:'file-duplicate',opId:op.id}]};
+  c.save(value);assert.deepEqual(c.load(),value);
+  assert.deepEqual(validateCache({...value,verifiedFiles:[...value.verifiedFiles,value.verifiedFiles[0]]}).verifiedFiles,value.verifiedFiles);
+ }finally{fs.rmSync(dir,{recursive:true});}
+});
+test('cache rejects unverified operation references and conflicting file mappings',()=>{
+ const one={id:'op-one',taskId:'task',device:'pc',clock:1,patch:{title:'saved'}};
+ const two={...one,id:'op-two',clock:2,patch:{done:true}};
+ const value={device:'pc',ops:[one,two],pending:[]};
+ for(const verifiedFiles of [null,{},[null],[[]],[{fileId:'',opId:one.id}],[{fileId:'x'.repeat(201),opId:one.id}],[{fileId:'invalid/file',opId:one.id}],[{fileId:'file',opId:'missing'}],[{fileId:'file',opId:one.id},{fileId:'file',opId:two.id}],Array(100001).fill({fileId:'file',opId:one.id})])assert.throws(()=>validateCache({...value,verifiedFiles}));
+});
 test('corrupt operation cache is not overwritten',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'michi-cache-'));try{const c=new OperationCache(dir);fs.writeFileSync(c.file,'broken');assert.throws(()=>c.load());assert.throws(()=>c.save({device:'x',ops:[],pending:[]}));assert.equal(fs.readFileSync(c.file,'utf8'),'broken');}finally{fs.rmSync(dir,{recursive:true});}});
 const {EventEmitter}=require('node:events');const {createDesktopFeatures}=require('../src/desktop/features.cjs');
 test('desktop features keep autostart off and expose safe explicit actions',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'michi-desktop-'));let startupWrites=0,registered='',quit=false,lastMenu;class Window extends EventEmitter{constructor(){super();this.webContents=new EventEmitter();this.webContents.send=()=>{};}isDestroyed(){return false;}isMinimized(){return false;}show(){}focus(){}hide(){this.hidden=true;}}

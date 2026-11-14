@@ -4,7 +4,7 @@ function validateRequest(input){
  if(!input||typeof input.url!=='string'||input.url.length>10000)throw Error('Driveリクエストが不正です。');const u=new URL(input.url);if(u.origin!=='https://www.googleapis.com'||u.username||u.password||u.hash)throw Error('許可されていない接続先です。');
  const options=input.options||{},method=options.method||'GET',headers={},query=u.searchParams;
  if(method==='GET'&&u.pathname==='/drive/v3/files'){
-  const keys=['spaces','q','fields','pageSize','pageToken'];if([...query.keys()].some(k=>!keys.includes(k))||query.get('spaces')!=='appDataFolder'||query.get('q')!=="trashed = false and appProperties has { key='michiFormat' and value='op-v1' }"||query.get('fields')!=='nextPageToken,files(id,name)'||query.get('pageSize')!=='1000')throw Error('Drive一覧の範囲が不正です。');return {url:u.href,method,headers};
+  const keys=['spaces','q','fields','pageSize','pageToken'];if([...query.keys()].some(k=>!keys.includes(k))||query.get('spaces')!=='appDataFolder'||query.get('q')!=="trashed = false and appProperties has { key='michiFormat' and value='op-v1' }"||!['nextPageToken,files(id,name)','nextPageToken,incompleteSearch,files(id,name)'].includes(query.get('fields'))||query.get('pageSize')!=='1000')throw Error('Drive一覧の範囲が不正です。');return {url:u.href,method,headers};
  }
  if(method==='GET'&&/^\/drive\/v3\/files\/[A-Za-z0-9_-]{1,200}$/.test(u.pathname)&&u.search==='?alt=media')return {url:u.href,method,headers};
  if(method==='POST'&&u.pathname==='/upload/drive/v3/files'&&u.search==='?uploadType=multipart&fields=id'){

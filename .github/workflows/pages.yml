@@ -2,6 +2,13 @@
 # Register origin https://cimc24004.github.io in the Web OAuth client first.
 name: Publish approved ToDo web app
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/build-web.cjs'
+      - 'package.json'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -47,6 +47,7 @@ Windowsビルド設定はx64 portable、署名なしです。ビルド成果物�
 - Google Auth PlatformがExternal/Testingの場合、Driveスコープを含むリフレッシュトークンは通常7日で期限切れになるため、その際は再接続が必要。アプリを閉じるたび・約1時間ごとの手動接続は不要になるが、権限取消やGoogle側の期限切れ時の再認証は必要。
 - 別のGoogleアカウントへの切替は既存端末キャッシュに対して拒否し、誤ったアカウントへの送信を防ぎます。
 - Google Driveへは不変の操作JSONを追加。複数端末で同じファイル全体を上書きせず、操作IDで重複排除してフィールド単位に決定的マージ。
+- 同期ではDriveの完全な一覧と検証済みの操作IDを照合し、以前は送信済みでもDriveに見つからない端末内の履歴を元のID・内容のまま再送します。旧版からの初回同期では既存ファイルも一度読み直します。一覧が不完全な場合や保存結果を確認できない場合は同期済みにせず、端末内の履歴を保持します。PC内にだけ残る履歴の再送には、この修正を含むPC版が必要です。
 - 同じ項目を同時に変更した場合、論理時計・端末ID・操作ID順の結果を表示。もう一方の操作は履歴JSONに残るものの、競合を選択する専用画面は未実装です。
 - 削除は論理削除。古い端末の編集だけでは復活せず、明示的な復元で戻せます。
 - 初期版はログを物理削除・圧縮しません。長期利用ではファイル数とAPI呼び出しが増えるため、現時点では個人の小規模利用向け。
@@ -92,4 +93,4 @@ GOOGLE_DESKTOP_CLIENT_ID=123-example-desktop.apps.googleusercontent.com
 - Google側のOAuthクライアント作成、Drive API有効化、許可origin設定は .env では代替できません。
 
 ### GitHub Pages
-`.github/workflows/pages.yml` を有効化済みです。PagesのソースをGitHub Actionsに設定し、Actions変数 `GOOGLE_WEB_CLIENT_ID` に現在のWebクライアントIDを登録します。originは `https://cimc24004.github.io`、配信パスは `/todo-sync/`。相対アセットURL・PWAの相対scopeを使用しています。GitHub Pagesにはサーバー機能がないため、ログイン保持を利用する場合は[Vercel設定手順](docs/vercel.md)で別の公開先を用意します。
+`.github/workflows/pages.yml` を有効化済みです。mainのWeb配信対象が更新されると自動配信し、手動実行にも対応します。PagesのソースをGitHub Actionsに設定し、Actions変数 `GOOGLE_WEB_CLIENT_ID` に現在のWebクライアントIDを登録します。originは `https://cimc24004.github.io`、配信パスは `/todo-sync/`。相対アセットURL・PWAの相対scopeを使用しています。GitHub Pagesにはサーバー機能がないため、ログイン保持を利用する場合は[Vercel設定手順](docs/vercel.md)で別の公開先を用意します。
